@@ -1,5 +1,4 @@
 /*** includes ***/
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,35 +7,47 @@
 
 
 /*** data ***/
-struct termios termios_default;
+struct editorConfig {
+	struct termios termios_default;
+};
 
+struct bufferConfig {
+	char buffer[1024];
+	int pos;
+};
+
+struct editorConfig E;
+struct bufferConfig B = { .buffer = "Just checkign things out\r\nHello\tl...", .pos = 0 };
 
 /*** terminal ***/
-void failed(const char *func) {
+void clearTerminal()
+{
+	write(STDOUT_FILENO, "\x1b[2J", 4); // clear the terminal
+	write(STDOUT_FILENO, "\x1b[H", 3); // put cursor in the 1:1 pos
+}
+
+
+void failed(const char *func)
+{
 	perror(func);
 	exit(1);
 }
 
-void clearTerminal()
-{
-	// clear the console & set cursor to the start
-	printf("\033[2J\033[1;1H");
-	fflush(stdout);
-}
 
 void disableTty()
 {
 	// TSCAFLUSH - waits until all pending output written to terminal
-	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &termios_default) == -1) failed("tcsetattr");
+	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.termios_default) == -1) failed("tcsetattr");
 	clearTerminal();
 }
 
+
 void enableTty()
 {
-	if (tcgetattr(STDIN_FILENO, &termios_default) == -1) failed("tcgetattr");
+	if (tcgetattr(STDIN_FILENO, &E.termios_default) == -1) failed("tcgetattr");
 	atexit(disableTty);
 
-	struct termios termios_tty = termios_default;
+	struct termios termios_tty = E.termios_default;
 
 	/* c_iflag - input flag => Disable CTRL - S,Q,C 
 	 * c_lflag - local flag => Disable echoing & canonical mode & CTRL - Z
@@ -57,32 +68,43 @@ void enableTty()
 	clearTerminal();
 }
 
+/*** input ***/
+void updateBuffer(char ch)
+{
+	switch (ch) {
+		case 127:
+			// fix it 
+			B.buffer[B.pos] = ch;
+			break;
+		case 'q':
+			exit(0);
+			break;
+		default:
+			B.buffer[B.pos] = ch;
+	}
+}
+
+/*** output ***/
+void drawScreen()
+{
+	clearTerminal();
+	write(STDOUT_FILENO, B.buffer, sizeof(B.buffer));
+}
+
 
 /*** init ***/
 int main()
 {
 	enableTty();
+	drawScreen();
 
 	while(1) {
 		char ch = '\0';
 		if (read(STDIN_FILENO, &ch, 1) == -1 && errno != EAGAIN) failed("read");
 
-		if (iscntrl(ch)) {
-			if (ch == 127) {
-				printf("\b \b");
-			} else if (ch == '\x1b') {
-				printf("%c", ch);
-			} else if (ch == 13) {
-				printf("\r\n");
-			} else if (ch == 9) {
-				printf("\t");
-			}
-		} else {
-			printf("%c", ch);
-		}
-
-		fflush(stdout); // `\n` new line will flush the output immediately
-		if (ch == 'q') break;
+		B.pos++;
+		updateBuffer(ch);
+		drawScreen();
 	};
 
 	return 0;
