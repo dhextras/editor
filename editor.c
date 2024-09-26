@@ -1,23 +1,36 @@
 /*** includes ***/
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <errno.h>
 #include <termios.h>
 
 
 /*** data ***/
-struct editorConfig {
+typedef struct {
 	struct termios termios_default;
-};
+	bool escape_enabled;
+} editorConfig;
 
-struct bufferConfig {
-	char buffer[1024];
+typedef struct {
+	char buffer[64];
 	int pos;
-};
+	int gap;
+	int left;
+	int right;
+} bufferConfig;
 
-struct editorConfig E;
-struct bufferConfig B = { .buffer = "Just checkign things out\r\nHello\tl...", .pos = 0 };
+
+editorConfig E = { .escape_enabled = false };
+bufferConfig B = {
+	.buffer = "________________________________________________________________",
+	.pos = 0,
+	.gap = 64,
+	.left = 0,
+	.right = 63
+
+};
 
 /*** terminal ***/
 void clearTerminal()
@@ -69,26 +82,125 @@ void enableTty()
 }
 
 /*** input ***/
-void updateBuffer(char ch)
+void left()
 {
-	switch (ch) {
-		case 127:
-			// fix it 
-			B.buffer[B.pos] = ch;
-			break;
-		case 'q':
-			exit(0);
-			break;
-		default:
-			B.buffer[B.pos] = ch;
+	while (B.pos < B.left) {
+		B.left--;
+		B.buffer[B.right] = B.buffer[B.left];
+		B.buffer[B.left] = '_';
+		B.right--;
 	}
 }
 
+void right()
+{
+	while (B.pos > B.left) {
+		B.right++;
+		B.buffer[B.left] = B.buffer[B.right];
+		B.buffer[B.right] = '_';
+		B.left++;
+	}
+}
+
+void move_gap()
+{
+	if (B.pos < B.left) {
+		left();
+	} else {
+		right();
+	}
+}
+
+void insert(char ch)
+{
+	if (B.pos != B.left) {
+		move_gap();
+	}
+
+	if (B.left < B.right) {
+		// else grow
+		B.buffer[B.left] = ch;
+		B.left++;
+		B.pos++;
+	}
+
+	
+}
+
+void delete()
+{
+	if (B.pos > 0) {
+		B.left--;
+		B.buffer[B.left] = '_';
+		B.pos--;
+	}
+}
+
+void handle_escapes(char ch) {
+	if (B.pos < 64 || B.pos > -1) {
+		switch (ch) {
+			case 'D':
+				B.pos--;
+				E.escape_enabled = false;
+				break;
+			case 'C':
+				B.pos++;
+				E.escape_enabled = false;
+				break;
+		}
+	}
+}
+
+void updateBuffer(char ch)
+{
+	switch (E.escape_enabled) {
+		case true:
+			handle_escapes(ch);
+			break;
+		case false:
+			switch (ch) {
+				case 127:
+					delete();
+					break;
+				case '\x1b':
+					E.escape_enabled = true;
+					break;
+				case 'q':
+					exit(0);
+					break;
+				default:
+					insert(ch);
+			}
+	}
+}
+
+
 /*** output ***/
+void drawCursor()
+{
+	dprintf(STDOUT_FILENO, "\x1b[1;%dH", B.pos + 1);
+}
+
+void drawDebugger()
+{
+	write(STDOUT_FILENO, "\x1b[32;1H", 7);
+	write(STDOUT_FILENO, "Pos: ", 5);
+	dprintf(STDOUT_FILENO, "%d\t", B.pos);
+	write(STDOUT_FILENO, "Left: ", 6);
+	dprintf(STDOUT_FILENO, "%d\t", B.left);
+	write(STDOUT_FILENO, "Right: ", 7);
+	dprintf(STDOUT_FILENO, "%d\t", B.right);
+	write(STDOUT_FILENO, B.buffer, sizeof(B.buffer));
+	drawCursor();
+}
+
 void drawScreen()
 {
 	clearTerminal();
-	write(STDOUT_FILENO, B.buffer, sizeof(B.buffer));
+	write(STDOUT_FILENO, B.buffer, B.left); // before the gap
+	write(STDOUT_FILENO, &B.buffer[B.right + 1], 63 - B.right); // after the gap
+	drawCursor();
+	drawDebugger();
 }
 
 
@@ -102,7 +214,6 @@ int main()
 		char ch = '\0';
 		if (read(STDIN_FILENO, &ch, 1) == -1 && errno != EAGAIN) failed("read");
 
-		B.pos++;
 		updateBuffer(ch);
 		drawScreen();
 	};
