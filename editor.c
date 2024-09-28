@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <termios.h>
 
+/*** defines ***/
+#define INIT_BUFFER_SIZE 32
 
 /*** data ***/
 typedef struct {
@@ -14,9 +16,10 @@ typedef struct {
 } editorConfig;
 
 typedef struct {
-	char buffer[64];
+	char *buffer;
 	int pos;
 	int gap;
+	int size;
 	int left;
 	int right;
 } bufferConfig;
@@ -24,13 +27,19 @@ typedef struct {
 
 editorConfig E = { .escape_enabled = false };
 bufferConfig B = {
-	.buffer = "________________________________________________________________",
 	.pos = 0,
-	.gap = 64,
+	.gap = INIT_BUFFER_SIZE,
+	.size = INIT_BUFFER_SIZE,
 	.left = 0,
-	.right = 63
-
+	.right = INIT_BUFFER_SIZE - 1
 };
+
+/*** memory management ***/
+void free_line_buff(char *line_buff)
+{
+	// make sure your only freeing it if its acutally exists
+	free(line_buff);
+}
 
 /*** terminal ***/
 void clearTerminal()
@@ -39,10 +48,10 @@ void clearTerminal()
 	write(STDOUT_FILENO, "\x1b[H", 3); // put cursor in the 1:1 pos
 }
 
-
 void failed(const char *func)
 {
 	perror(func);
+	free_line_buff(B.buffer);
 	exit(1);
 }
 
@@ -86,8 +95,10 @@ void left()
 {
 	while (B.pos < B.left) {
 		B.left--;
-		B.buffer[B.right] = B.buffer[B.left];
-		B.buffer[B.left] = '_';
+		if (B.left < B.right) {
+			B.buffer[B.right] = B.buffer[B.left];
+			B.buffer[B.left] = '\0';
+		}
 		B.right--;
 	}
 }
@@ -96,8 +107,10 @@ void right()
 {
 	while (B.pos > B.left) {
 		B.right++;
-		B.buffer[B.left] = B.buffer[B.right];
-		B.buffer[B.right] = '_';
+		if (B.left < B.right) {
+			B.buffer[B.left] = B.buffer[B.right];
+			B.buffer[B.right] = '\0';
+		}
 		B.left++;
 	}
 }
@@ -111,43 +124,78 @@ void move_gap()
 	}
 }
 
+void grow_buff()
+{
+	char *newBuff = (char *)realloc(B.buffer, 2 * B.size);
+
+	if (newBuff == NULL) {
+		perror("Failed to reallocate memory");
+		free_line_buff(B.buffer);
+		exit(0);
+	}
+
+	B.buffer = newBuff;
+	B.left = B.size + 1;
+	B.right = B.size + B.gap;
+	B.size += B.size;
+}
+
 void insert(char ch)
+{
+	if (B.left > B.right) {
+		grow_buff();
+	}
+
+	if (B.pos != B.left) {
+		move_gap();
+	}
+
+	B.buffer[B.left] = ch;
+	B.left++;
+	B.pos++;
+}
+
+void delete()
 {
 	if (B.pos != B.left) {
 		move_gap();
 	}
 
-	if (B.left < B.right) {
-		// else grow
-		B.buffer[B.left] = ch;
-		B.left++;
-		B.pos++;
-	}
-
-	
-}
-
-void delete()
-{
 	if (B.pos > 0) {
 		B.left--;
-		B.buffer[B.left] = '_';
+		B.buffer[B.left] = '\0';
 		B.pos--;
 	}
 }
 
+void move_cl()
+{
+	if (B.pos < B.size - B.right + B.left && B.pos > 0) {
+		B.pos--;
+	}
+}
+
+void move_cr()
+{
+	if (B.pos < B.size - B.right + B.left - 1 && B.pos > -1) {
+		B.pos++;
+	}
+}
+
 void handle_escapes(char ch) {
-	if (B.pos < 64 || B.pos > -1) {
-		switch (ch) {
-			case 'D':
-				B.pos--;
-				E.escape_enabled = false;
-				break;
-			case 'C':
-				B.pos++;
-				E.escape_enabled = false;
-				break;
-		}
+	switch (ch) {
+		case 'D':
+			move_cl();
+			E.escape_enabled = false;
+			break;
+		case 'C':
+			move_cr();
+			E.escape_enabled = false;
+			break;
+		case '[':
+			break;
+		default:
+			E.escape_enabled = false;
 	}
 }
 
@@ -162,10 +210,14 @@ void updateBuffer(char ch)
 				case 127:
 					delete();
 					break;
+				case 13:
+					// gotta create new line in the buffer
+					break;
 				case '\x1b':
 					E.escape_enabled = true;
 					break;
 				case 'q':
+					free_line_buff(B.buffer);
 					exit(0);
 					break;
 				default:
@@ -185,12 +237,13 @@ void drawDebugger()
 {
 	write(STDOUT_FILENO, "\x1b[32;1H", 7);
 	write(STDOUT_FILENO, "Pos: ", 5);
-	dprintf(STDOUT_FILENO, "%d\t", B.pos);
+	dprintf(STDOUT_FILENO, "%d ", B.pos);
 	write(STDOUT_FILENO, "Left: ", 6);
-	dprintf(STDOUT_FILENO, "%d\t", B.left);
+	dprintf(STDOUT_FILENO, "%d ", B.left);
 	write(STDOUT_FILENO, "Right: ", 7);
-	dprintf(STDOUT_FILENO, "%d\t", B.right);
-	write(STDOUT_FILENO, B.buffer, sizeof(B.buffer));
+	dprintf(STDOUT_FILENO, "%d ", B.right);
+	write(STDOUT_FILENO, "Size: ", 6);
+	dprintf(STDOUT_FILENO, "%d ", B.size);
 	drawCursor();
 }
 
@@ -198,7 +251,7 @@ void drawScreen()
 {
 	clearTerminal();
 	write(STDOUT_FILENO, B.buffer, B.left); // before the gap
-	write(STDOUT_FILENO, &B.buffer[B.right + 1], 63 - B.right); // after the gap
+	write(STDOUT_FILENO, &B.buffer[B.right + 1], B.size - B.right - 1); // after the gap
 	drawCursor();
 	drawDebugger();
 }
@@ -207,6 +260,12 @@ void drawScreen()
 /*** init ***/
 int main()
 {
+	B.buffer = (char *)malloc(INIT_BUFFER_SIZE);
+	if (B.buffer == NULL) {
+		perror("Failed to allocate memory");
+		return 0;
+	}
+
 	enableTty();
 	drawScreen();
 
@@ -217,6 +276,6 @@ int main()
 		updateBuffer(ch);
 		drawScreen();
 	};
-
+	
 	return 0;
 }
