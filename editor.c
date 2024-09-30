@@ -135,9 +135,9 @@ void grow_buff()
 	}
 
 	B.buffer = newBuff;
-	B.left = B.size + 1;
-	B.right = B.size + B.gap;
+	B.left = B.size;
 	B.size += B.size;
+	B.right = B.size - 1;
 }
 
 void insert(char ch)
