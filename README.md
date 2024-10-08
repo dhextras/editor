@@ -18,5 +18,5 @@ make
 ## run
 
 ```bash
-./editor
+build/editor
 ```
