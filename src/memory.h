@@ -2,6 +2,9 @@
 #define MEMORY_H
 
 
-void free_line_buff(char *line_buff);
+#include "gapbuffer.h"
+
+void create_buff_line(bufferConfig *B, char *text);
+void free_buff_config(bufferConfig *B);
 
 #endif

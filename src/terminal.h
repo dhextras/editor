@@ -10,6 +10,7 @@ typedef struct {
 } editorConfig;
 
 void clearTerminal();
+void clearCurrLine();
 void failed(const char *func);
 void disableTty(editorConfig *E);
 void enableTty(editorConfig *E);

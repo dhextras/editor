@@ -13,6 +13,14 @@ void clearTerminal()
 	write(STDOUT_FILENO, "\x1b[H", 3); // put cursor in the 1:1 pos
 }
 
+
+void clearCurrLine()
+{
+	write(STDOUT_FILENO, "\x1b[G", 3);  // Move cursor to the beginning of the line
+	write(STDOUT_FILENO, "\x1b[2K", 4); // Clear entire line
+}
+
+
 void failed(const char *func)
 {
 	perror(func);

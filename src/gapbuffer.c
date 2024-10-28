@@ -1,110 +1,115 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
 #include "gapbuffer.h"
+#include "screen.h"
 #include "memory.h"
+#include "terminal.h"
 
+// handle jk or up down movement, deleting end of the line
 
-void left(bufferConfig *B)
+void left(bufferConfig *B, BufferLine *buff_line)
 {
-	while (B->pos < B->left) {
-		B->left--;
-		if (B->left < B->right) {
-			B->buffer[B->right] = B->buffer[B->left];
-			B->buffer[B->left] = '\0';
+	while (B->currentPos < buff_line->left) {
+		buff_line->left--;
+		if (buff_line->left < buff_line->right) {
+			buff_line->buffer[buff_line->right] = buff_line->buffer[buff_line->left];
+			buff_line->buffer[buff_line->left] = '\0';
 		}
-		B->right--;
+		buff_line->right--;
 	}
 }
 
-void right(bufferConfig *B)
+void right(bufferConfig *B, BufferLine *buff_line)
 {
-	while (B->pos > B->left) {
-		B->right++;
-		if (B->left < B->right) {
-			B->buffer[B->left] = B->buffer[B->right];
-			B->buffer[B->right] = '\0';
+	while (B->currentPos > buff_line->left) {
+		buff_line->right++;
+		if (buff_line->left < buff_line->right) {
+			buff_line->buffer[buff_line->left] = buff_line->buffer[buff_line->right];
+			buff_line->buffer[buff_line->right] = '\0';
 		}
-		B->left++;
+		buff_line->left++;
 	}
 }
 
-void move_gap(bufferConfig *B)
+void move_gap(bufferConfig *B, BufferLine *buff_line)
 {
-	if (B->pos < B->left) {
-		left(B);
+	if (B->currentPos < buff_line->left) {
+		left(B, buff_line);
 	} else {
-		right(B);
+		right(B, buff_line);
 	}
 }
 
-void grow_buff(bufferConfig *B)
+void grow_buff(bufferConfig *B, BufferLine *buff_line)
 {
-	char *newBuff = (char *)realloc(B->buffer, 2 * B->size);
+	char *newBuff = (char *)realloc(buff_line->buffer, 2 * buff_line->size);
 
 	if (newBuff == NULL) {
-		perror("Failed to reallocate memory");
-		free_line_buff(B->buffer);
+		perror("Failed to reallocate memory for growing buffer");
+		free_buff_config(B);
 		exit(0);
 	}
 
-	B->buffer = newBuff;
-	B->left = B->size;
-	B->size += B->size;
-	B->right = B->size - 1;
+	buff_line->buffer = newBuff;
+	buff_line->left = buff_line->size;
+	buff_line->size += buff_line->size;
+	buff_line->right = buff_line->size - 1;
 }
 
-void insert(char ch, bufferConfig *B)
+void insert(char ch, bufferConfig *B, BufferLine *buff_line)
 {
-	if (B->left > B->right) {
-		grow_buff(B);
+	if (buff_line->left > buff_line->right) {
+		grow_buff(B, buff_line);
 	}
 
-	if (B->pos != B->left) {
-		move_gap(B);
+	if (B->currentPos != buff_line->left) {
+		move_gap(B, buff_line);
 	}
 
-	B->buffer[B->left] = ch;
-	B->left++;
-	B->pos++;
+	buff_line->buffer[buff_line->left] = ch;
+	buff_line->left++;
+	B->currentPos++;
 }
 
-void delete(bufferConfig *B)
+void delete(bufferConfig *B, BufferLine *buff_line)
 {
-	if (B->pos != B->left) {
-		move_gap(B);
+	if (B->currentPos != buff_line->left) {
+		move_gap(B, buff_line);
 	}
 
-	if (B->pos > 0) {
-		B->left--;
-		B->buffer[B->left] = '\0';
-		B->pos--;
+	if (B->currentPos > 0) {
+		buff_line->left--;
+		buff_line->buffer[buff_line->left] = '\0';
+		B->currentPos--;
 	}
 }
 
-void move_cl(bufferConfig *B)
+void move_cl(bufferConfig *B, BufferLine *buff_line)
 {
-	if (B->pos < B->size - B->right + B->left && B->pos > 0) {
-		B->pos--;
+	if (B->currentPos < buff_line->size - buff_line->right + buff_line->left && B->currentPos > 0) {
+		B->currentPos--;
 	}
 }
 
-void move_cr(bufferConfig *B)
+void move_cr(bufferConfig *B, BufferLine *buff_line)
 {
-	if (B->pos < B->size - B->right + B->left - 1 && B->pos > -1) {
-		B->pos++;
+	if (B->currentPos < buff_line->size - buff_line->right + buff_line->left - 1 && B->currentPos > -1) {
+		B->currentPos++;
 	}
 }
 
-void handle_escapes(char ch, bufferConfig *B, editorConfig *E) {
+void handle_escapes(char ch, bufferConfig *B, BufferLine *buff_line, editorConfig *E)
+{
 	switch (ch) {
 		case 'D':
-			move_cl(B);
+			move_cl(B, buff_line);
 			E->escape_enabled = false;
 			break;
 		case 'C':
-			move_cr(B);
+			move_cr(B, buff_line);
 			E->escape_enabled = false;
 			break;
 		case '[':
@@ -114,30 +119,45 @@ void handle_escapes(char ch, bufferConfig *B, editorConfig *E) {
 	}
 }
 
-void updateBuffer(char ch, bufferConfig *B, editorConfig *E)
+void update_buffer(char ch, bufferConfig *B, editorConfig *E)
 {
+	char *empty = "";
+	if (B->buffLines == NULL) {
+		create_buff_line(B, empty);
+	}
+
+	BufferLine *current_buff_line_p = B->buffLines[B->currentLine];
+
 	switch (E->escape_enabled) {
 		case true:
-			handle_escapes(ch, B, E);
+			handle_escapes(ch, B, current_buff_line_p, E);
+			drawCursor(B);
 			break;
 		case false:
 			switch (ch) {
 				case 127:
-					delete(B);
+					delete(B, current_buff_line_p);
+					drawLine(B, current_buff_line_p);
 					break;
 				case 13:
-					// gotta create new line in the buffer
+					// This only handle when the cursor is at the end of the buffer
+					// TODO: Make sure to handle when its in the middle of the buffer/ lines
+					create_buff_line(B, empty);
+					current_buff_line_p = B->buffLines[B->currentLine];
+					drawLine(B, current_buff_line_p);
+					// finish from heree....
 					break;
 				case '\x1b':
 					E->escape_enabled = true;
 					break;
 				case 'q':
-					free_line_buff(B->buffer);
+					free_buff_config(B);
 					disableTty(E);
 					exit(0);
 					break;
 				default:
-					insert(ch, B);
+					insert(ch, B, current_buff_line_p);
+					drawLine(B, current_buff_line_p);
 			}
 	}
 }
