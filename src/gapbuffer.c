@@ -101,9 +101,38 @@ void move_cr(bufferConfig *B, BufferLine *buff_line)
 	}
 }
 
+void move_cu(bufferConfig *B)
+{
+	if (B->currentLine > 0) {
+		BufferLine *prev_buff_line_p = B->buffLines[B->currentLine - 1];
+		int prev_buff_line_length = prev_buff_line_p->size - prev_buff_line_p->right + prev_buff_line_p->left - 1;
+
+		B->currentLine--;
+
+		if (B->currentPos > prev_buff_line_length) {
+			B->currentPos = prev_buff_line_length;
+		}
+	}
+}
+
+void move_cd(bufferConfig *B)
+{
+	if (B->currentLine < B->numLines - 1) {
+		BufferLine *next_buff_line_p = B->buffLines[B->currentLine + 1];
+		int next_buff_line_length = next_buff_line_p->size - next_buff_line_p->right + next_buff_line_p->left - 1;
+
+		B->currentLine++;
+
+		if (B->currentPos > next_buff_line_length) {
+			B->currentPos = next_buff_line_length;
+		}
+	}
+}
+
 void handle_escapes(char ch, bufferConfig *B, BufferLine *buff_line, editorConfig *E)
 {
 	switch (ch) {
+		// TODO: Store the last postion of the line to come back since the next and prev lines may some times be smaller then the current one
 		case 'D':
 			move_cl(B, buff_line);
 			E->escape_enabled = false;
@@ -112,6 +141,15 @@ void handle_escapes(char ch, bufferConfig *B, BufferLine *buff_line, editorConfi
 			move_cr(B, buff_line);
 			E->escape_enabled = false;
 			break;
+		case 'A':
+			move_cu(B);
+			E->escape_enabled = false;
+			break;
+		case 'B':
+			move_cd(B);
+			E->escape_enabled = false;
+			break;
+
 		case '[':
 			break;
 		default:
