@@ -72,6 +72,7 @@ void insert(char ch, bufferConfig *B, BufferLine *buff_line)
 	buff_line->buffer[buff_line->left] = ch;
 	buff_line->left++;
 	B->currentPos++;
+	B->lastPos = B->currentPos;
 }
 
 void delete(bufferConfig *B, BufferLine *buff_line)
@@ -84,6 +85,7 @@ void delete(bufferConfig *B, BufferLine *buff_line)
 		buff_line->left--;
 		buff_line->buffer[buff_line->left] = '\0';
 		B->currentPos--;
+		B->lastPos = B->currentPos;
 	}
 }
 
@@ -91,6 +93,7 @@ void move_cl(bufferConfig *B, BufferLine *buff_line)
 {
 	if (B->currentPos < buff_line->size - buff_line->right + buff_line->left && B->currentPos > 0) {
 		B->currentPos--;
+		B->lastPos = B->currentPos;
 	}
 }
 
@@ -98,6 +101,7 @@ void move_cr(bufferConfig *B, BufferLine *buff_line)
 {
 	if (B->currentPos < buff_line->size - buff_line->right + buff_line->left - 1 && B->currentPos > -1) {
 		B->currentPos++;
+		B->lastPos = B->currentPos;
 	}
 }
 
@@ -109,8 +113,10 @@ void move_cu(bufferConfig *B)
 
 		B->currentLine--;
 
-		if (B->currentPos > prev_buff_line_length) {
+		if (B->lastPos > prev_buff_line_length) {
 			B->currentPos = prev_buff_line_length;
+		} else {
+			B->currentPos = B->lastPos;
 		}
 	}
 }
@@ -123,8 +129,10 @@ void move_cd(bufferConfig *B)
 
 		B->currentLine++;
 
-		if (B->currentPos > next_buff_line_length) {
+		if (B->lastPos > next_buff_line_length) {
 			B->currentPos = next_buff_line_length;
+		} else {
+			B->currentPos = B->lastPos;
 		}
 	}
 }
@@ -132,7 +140,6 @@ void move_cd(bufferConfig *B)
 void handle_escapes(char ch, bufferConfig *B, BufferLine *buff_line, editorConfig *E)
 {
 	switch (ch) {
-		// TODO: Store the last postion of the line to come back since the next and prev lines may some times be smaller then the current one
 		case 'D':
 			move_cl(B, buff_line);
 			E->escape_enabled = false;
@@ -149,12 +156,14 @@ void handle_escapes(char ch, bufferConfig *B, BufferLine *buff_line, editorConfi
 			move_cd(B);
 			E->escape_enabled = false;
 			break;
-
 		case '[':
 			break;
 		default:
 			E->escape_enabled = false;
 	}
+
+	// NOTE: Remove this later cause this causes debugger printing even when the input didn't did anything - and figure out a way to handle that maybe return value from the move_cx functions and draw depending on that
+	drawDebugger(B, buff_line);
 }
 
 void update_buffer(char ch, bufferConfig *B, editorConfig *E)
@@ -179,7 +188,7 @@ void update_buffer(char ch, bufferConfig *B, editorConfig *E)
 					break;
 				case 13:
 					// This only handle when the cursor is at the end of the buffer
-					// TODO: Make sure to handle when its in the middle of the buffer/ lines
+					// TODO: Make sure to handle when its in the middle of the buffer/ lines and split the lines and make new ones
 					create_buff_line(B, empty);
 					current_buff_line_p = B->buffLines[B->currentLine];
 					drawLine(B, current_buff_line_p);

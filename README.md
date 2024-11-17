@@ -10,6 +10,7 @@
 - [x] Implement moving up and down functions
 - [ ] open a file and read it's content
 - [ ] Use the file content instead of the predefined string to a file & then saving it
+- [ ] Final touch up should be bringing the customization on the first time the editor even got opened they can skip and make configuration on their own later with using plugins and shit, show them whats happening under the hood like creating files and shits all those shits shit should be shown in the start
 
 ## compile
 

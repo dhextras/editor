@@ -49,6 +49,7 @@ void create_buff_line(bufferConfig *B, char *text)
 	B->numLines++;
 	B->currentLine++;
 	B->currentPos = temp->left;
+	B->lastPos = temp->left;
 }
 
 void free_buff_config(bufferConfig *B)
@@ -68,4 +69,5 @@ void free_buff_config(bufferConfig *B)
 	B->numLines = 0;
 	B->currentLine = -1;
 	B->currentPos = 0;
+	B->lastPos = 0;
 }

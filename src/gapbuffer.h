@@ -13,9 +13,11 @@ typedef struct {
 } BufferLine;
 
 typedef struct {
+	// TODO: Gotta make the BufferLine a linked list
 	BufferLine **buffLines;
 	int currentLine;
 	int currentPos;
+	int lastPos;
 	int numLines;
 } bufferConfig;
 

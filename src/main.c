@@ -15,6 +15,7 @@ bufferConfig *B = &(bufferConfig){
 	.buffLines = NULL,
 	.currentLine = -1,
 	.currentPos = 0,
+	.lastPos = 0,
 	.numLines = 0
 };
 

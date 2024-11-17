@@ -14,19 +14,21 @@ void drawCursor(bufferConfig *B)
 
 void drawDebugger(bufferConfig *B, BufferLine *buff_line)
 {
-	write(STDOUT_FILENO, "\x1b[32;1H", 7);
+	write(STDOUT_FILENO, "\x1b[50;1H", 7);
 	clearCurrLine();
 	write(STDOUT_FILENO, "Total Line: ", 11);
 	dprintf(STDOUT_FILENO, "%d ", B->numLines);
-	write(STDOUT_FILENO, "Current Line: ", 14);
+	write(STDOUT_FILENO, "| Current Line: ", 16);
 	dprintf(STDOUT_FILENO, "%d ", B->currentLine);
-	write(STDOUT_FILENO, "Pos: ", 5);
+	write(STDOUT_FILENO, "| Pos: ", 7);
 	dprintf(STDOUT_FILENO, "%d ", B->currentPos);
-	write(STDOUT_FILENO, "Left: ", 6);
+	write(STDOUT_FILENO, "| Last Pos: ", 12);
+	dprintf(STDOUT_FILENO, "%d ", B->lastPos);
+	write(STDOUT_FILENO, "| Left: ", 8);
 	dprintf(STDOUT_FILENO, "%d ", buff_line->left);
-	write(STDOUT_FILENO, "Right: ", 7);
+	write(STDOUT_FILENO, "| Right: ", 9);
 	dprintf(STDOUT_FILENO, "%d ", buff_line->right);
-	write(STDOUT_FILENO, "Size: ", 6);
+	write(STDOUT_FILENO, "| Size: ", 8);
 	dprintf(STDOUT_FILENO, "%d ", buff_line->size);
 	drawCursor(B);
 }
